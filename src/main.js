@@ -1,6 +1,7 @@
 // Y Combinator companies scraper - CheerioCrawler implementation
 import { Actor, log } from 'apify';
 import { CheerioCrawler, Dataset } from 'crawlee';
+import { gotScraping } from 'got-scraping';
 import { load as cheerioLoad } from 'cheerio';
 
 // Single-entrypoint main
@@ -80,16 +81,41 @@ async function main() {
             };
         }
 
-        function findCompanyCards($) {
-            return $('div.company-card').toArray(); // Adjust selector based on actual page structure
+        function extractAlgoliaOpts($) {
+            const scripts = $('script').filter((_, el) => $(el).html().includes('window.AlgoliaOpts'));
+            if (scripts.length) {
+                const scriptText = scripts.first().html();
+                const match = scriptText.match(/window\.AlgoliaOpts\s*=\s*({[^}]+})/);
+                if (match) {
+                    try {
+                        return JSON.parse(match[1]);
+                    } catch (e) { /* ignore */ }
+                }
+            }
+            return null;
         }
 
-        function findNextPage($, base) {
-            const rel = $('a[rel="next"]').attr('href');
-            if (rel) return toAbs(rel, base);
-            const next = $('a').filter((_, el) => /(^|\s)(next|›|»|>)/i.test($(el).text())).first().attr('href');
-            if (next) return toAbs(next, base);
-            return null;
+        function mapHitToData(hit) {
+            return {
+                company_image: hit.logo_url || null,
+                company_id: hit.id || hit.objectID || null,
+                company_name: hit.name || null,
+                url: hit.url ? toAbs(hit.url) : null,
+                short_description: hit.one_liner || hit.description || null,
+                long_description: hit.description || null,
+                batch: hit.batch || null,
+                status: hit.status || null,
+                tags: hit.tags || [],
+                company_location: hit.location || null,
+                year_founded: hit.year_founded || null,
+                team_size: hit.team_size || null,
+                primary_partner: hit.primary_partner || null,
+                website: hit.website ? toAbs(hit.website) : null,
+                company_linkedin: hit.linkedin_url ? toAbs(hit.linkedin_url) : null,
+                company_x: hit.twitter_url ? toAbs(hit.twitter_url) : null,
+                founders: [], // Will be filled in DETAIL
+                open_jobs: [] // Will be filled in DETAIL
+            };
         }
 
         const crawler = new CheerioCrawler({
@@ -102,26 +128,42 @@ async function main() {
                 const label = request.userData?.label || 'LIST';
                 const pageNo = request.userData?.pageNo || 1;
 
-                if (label === 'LIST') {
-                    const cards = findCompanyCards($);
-                    crawlerLog.info(`LIST ${request.url} -> found ${cards.length} companies`);
+                if (label === 'API_LIST') {
+                    const apiData = request.userData.apiData;
+                    const batch = request.userData.batch;
+                    const pageNo = request.userData.pageNo;
+                    try {
+                        const response = await gotScraping.post(apiData.url, {
+                            json: apiData.body,
+                            headers: {
+                                'x-algolia-application-id': apiData.params.get('x-algolia-application-id'),
+                                'x-algolia-api-key': apiData.params.get('x-algolia-api-key'),
+                            },
+                            proxyUrl: proxyConf ? proxyConf.newUrl() : undefined, // Use proxy if available
+                        });
+                        const json = JSON.parse(response.body);
+                        const hits = json.hits || [];
+                        crawlerLog.info(`API_LIST page ${pageNo} -> found ${hits.length} companies`);
 
-                    const remaining = RESULTS_WANTED - saved;
-                    const toProcess = cards.slice(0, Math.max(0, remaining));
-                    for (const card of toProcess) {
-                        const $card = $(card);
-                        const data = extractCompanyData($card);
-                        if (data.url && (scrape_founders || scrape_open_jobs)) {
-                            await enqueueLinks({ urls: [data.url], userData: { label: 'DETAIL', companyData: data } });
-                        } else {
-                            await dataset.pushData(data);
-                            saved++;
+                        const remaining = RESULTS_WANTED - saved;
+                        const toProcess = hits.slice(0, Math.max(0, remaining));
+                        for (const hit of toProcess) {
+                            const data = mapHitToData(hit);
+                            if (data.url && (scrape_founders || scrape_open_jobs)) {
+                                await enqueueLinks({ urls: [data.url], userData: { label: 'DETAIL', companyData: data } });
+                            } else {
+                                await dataset.pushData(data);
+                                saved++;
+                            }
                         }
-                    }
 
-                    if (saved < RESULTS_WANTED && pageNo < MAX_PAGES) {
-                        const next = findNextPage($, request.url);
-                        if (next) await enqueueLinks({ urls: [next], userData: { label: 'LIST', pageNo: pageNo + 1 } });
+                        if (saved < RESULTS_WANTED && json.nbPages > pageNo + 1 && pageNo + 1 < MAX_PAGES) {
+                            const nextApiData = { ...apiData };
+                            nextApiData.body = { ...nextApiData.body, page: pageNo + 1 };
+                            await enqueueLinks({ urls: [nextApiData.url], userData: { label: 'API_LIST', pageNo: pageNo + 1, apiData: nextApiData, batch } });
+                        }
+                    } catch (e) {
+                        crawlerLog.error(`API_LIST page ${pageNo} -> failed: ${e.message}`);
                     }
                     return;
                 }
