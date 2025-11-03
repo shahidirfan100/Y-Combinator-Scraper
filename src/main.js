@@ -46,7 +46,7 @@ async function main() {
         const ALGOLIA_API_KEY = 'MjBjYjRiMzY0NzdhZWY0NjExY2NhZjYxMGIxYjc2MTAwNWFkNTkwNTc4NjgxYjU0YzFhYTY2ZGQ5OGY5NDMxZnJlc3RyaWN0SW5kaWNlcz0lNUIlMjJZQ0NvbXBhbnlfcHJvZHVjdGlvbiUyMiUyQyUyMllDQ29tcGFueV9CeV9MYXVuY2hfRGF0ZV9wcm9kdWN0aW9uJTIyJTVEJnRhZ0ZpbHRlcnM9JTVCJTIyeWNkY19wdWJsaWMlMjIlNUQmYW5hbHl0aWNzVGFncz0lNUIlMjJ5Y2RjJTIyJTVE';
         const ALGOLIA_INDEX = 'YCCompany_production';
 
-        async function fetchCompaniesFromAPI(page = 0, batchFilter = null, retries = 3) {
+        async function fetchCompaniesFromAPI(page = 0, batchFilter = null, retries = proxyConf ? 6 : 4) {
             const apiUrl = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${ALGOLIA_INDEX}/query`;
 
             const requestPayload = {
@@ -92,6 +92,9 @@ async function main() {
                             'sec-fetch-site': 'cross-site',
                         },
                         responseType: 'json',
+                        timeout: {
+                            request: 45000,
+                        },
                         throwHttpErrors: false,
                     });
 
@@ -109,14 +112,20 @@ async function main() {
                         }
                     }
                 } catch (error) {
-                    log.error(`API request attempt ${attempt + 1} failed: ${error.message}`);
-                    if (attempt < retries - 1) {
-                        const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
-                        log.info(`Retrying in ${backoff}ms...`);
+                    const message = error?.response?.statusCode
+                        ? `${error.response.statusCode} ${error.response.statusMessage || ''}`.trim()
+                        : error.message || String(error);
+                    log.warning(`API request attempt ${attempt + 1} failed: ${message}`);
+                    const isTransient = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|ETIMEDOUT/i.test(message)
+                        || error?.response?.statusCode >= 500
+                        || /Proxy responded/.test(message);
+                    if (attempt < retries - 1 && isTransient) {
+                        const backoff = Math.min(1500 * Math.pow(2, attempt), 15000);
+                        log.debug(`Retrying Algolia request in ${backoff}ms...`);
                         await delay(backoff);
-                    } else {
-                        throw error;
+                        continue;
                     }
+                    throw error;
                 }
             }
 
@@ -137,7 +146,7 @@ async function main() {
 
         const decodeEntities = (str = '') => str.replace(/(&quot;|&#x27;|&#39;|&amp;|&lt;|&gt;|&#x2F;)/g, (match) => htmlEntities[match] ?? match);
 
-        async function fetchCompanyDetails(slug, retries = 3) {
+        async function fetchCompanyDetails(slug, retries = proxyConf ? 5 : 3) {
             if (!slug) return null;
             if (detailCache.has(slug)) return detailCache.get(slug);
 
@@ -163,6 +172,9 @@ async function main() {
                             'referer': 'https://www.ycombinator.com/companies',
                         },
                         throwHttpErrors: false,
+                        timeout: {
+                            request: 45000,
+                        },
                     });
 
                     if (response.statusCode === 404) {
@@ -218,15 +230,21 @@ async function main() {
                     detailCache.set(slug, normalized);
                     return normalized;
                 } catch (error) {
-                    log.warning(`Detail fetch attempt ${attempt + 1} for ${slug} failed: ${error.message}`);
-                    if (attempt < retries - 1) {
-                        const backoff = Math.min(1500 * (attempt + 1), 10000);
+                    const message = error?.response?.statusCode
+                        ? `${error.response.statusCode} ${error.response.statusMessage || ''}`.trim()
+                        : error.message || String(error);
+                    log.warning(`Detail fetch attempt ${attempt + 1} for ${slug} failed: ${message}`);
+                    const isTransient = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH/i.test(message)
+                        || error?.response?.statusCode >= 500
+                        || /Proxy responded/.test(message);
+                    if (attempt < retries - 1 && isTransient) {
+                        const backoff = Math.min(2000 * (attempt + 1), 15000);
                         log.debug(`Retrying company detail in ${backoff}ms...`);
                         await delay(backoff);
-                    } else {
-                        detailCache.set(slug, null);
-                        return null;
+                        continue;
                     }
+                    detailCache.set(slug, null);
+                    return null;
                 }
             }
 
