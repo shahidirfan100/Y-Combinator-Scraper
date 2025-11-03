@@ -1,0 +1,131 @@
+{
+  "actorSpecification": 1,
+  "fields": {
+    "company_image": {
+      "type": "string",
+      "description": "URL of the company logo image"
+    },
+    "company_id": {
+      "type": "string",
+      "description": "Unique identifier for the company"
+    },
+    "company_name": {
+      "type": "string",
+      "description": "Name of the company"
+    },
+    "url": {
+      "type": "string",
+      "description": "URL to the company's Y Combinator page"
+    },
+    "short_description": {
+      "type": "string",
+      "description": "Short description of the company"
+    },
+    "long_description": {
+      "type": "string",
+      "description": "Long description of the company"
+    },
+    "batch": {
+      "type": "string",
+      "description": "Y Combinator batch (e.g., S25, W24)"
+    },
+    "status": {
+      "type": "string",
+      "description": "Company status (e.g., Active, Acquired)"
+    },
+    "tags": {
+      "type": "array",
+      "description": "Array of industry tags"
+    },
+    "company_location": {
+      "type": "string",
+      "description": "Company location"
+    },
+    "year_founded": {
+      "type": "string",
+      "description": "Year the company was founded"
+    },
+    "team_size": {
+      "type": "string",
+      "description": "Team size"
+    },
+    "primary_partner": {
+      "type": "string",
+      "description": "Primary Y Combinator partner"
+    },
+    "website": {
+      "type": "string",
+      "description": "Company website URL"
+    },
+    "company_linkedin": {
+      "type": "string",
+      "description": "Company LinkedIn URL"
+    },
+    "company_x": {
+      "type": "string",
+      "description": "Company X (Twitter) URL"
+    },
+    "founders": {
+      "type": "array",
+      "description": "Array of founder objects with id, name, linkedin, x"
+    },
+    "open_jobs": {
+      "type": "array",
+      "description": "Array of open job objects with id, title, description_url, description, location, salary, years_experience"
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "Overview",
+      "transformation": {
+        "fields": [
+          "company_name",
+          "url",
+          "batch",
+          "status",
+          "company_location",
+          "year_founded",
+          "team_size",
+          "website"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "company_name": {
+            "label": "Company Name",
+            "format": "text"
+          },
+          "url": {
+            "label": "URL",
+            "format": "link"
+          },
+          "batch": {
+            "label": "Batch",
+            "format": "text"
+          },
+          "status": {
+            "label": "Status",
+            "format": "text"
+          },
+          "company_location": {
+            "label": "Location",
+            "format": "text"
+          },
+          "year_founded": {
+            "label": "Founded",
+            "format": "text"
+          },
+          "team_size": {
+            "label": "Team Size",
+            "format": "text"
+          },
+          "website": {
+            "label": "Website",
+            "format": "link"
+          }
+        }
+      }
+    }
+  }
+}
