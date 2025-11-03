@@ -1,6 +1,6 @@
 // Y Combinator companies scraper - Advanced implementation with stealth features
 import { Actor, log } from 'apify';
-import { CheerioCrawler, Dataset } from 'crawlee';
+import { Dataset } from 'crawlee';
 import { gotScraping } from 'got-scraping';
 
 // Single-entrypoint main
@@ -20,7 +20,10 @@ async function main() {
 
         log.info('Y Combinator Scraper started...');
         log.info(`Target: ${url || 'https://www.ycombinator.com/companies'}`);
-        log.info(`Results wanted: ${RESULTS_WANTED}, Max pages: ${MAX_PAGES}`);
+        const targetResults = scrape_all_companies ? Number.MAX_SAFE_INTEGER : RESULTS_WANTED;
+        const targetResultsLabel = scrape_all_companies ? 'all available' : targetResults;
+
+        log.info(`Results wanted: ${targetResultsLabel}, Max pages: ${MAX_PAGES}`);
 
         const toAbs = (href, base = 'https://www.ycombinator.com') => {
             try { return new URL(href, base).href; } catch { return null; }
@@ -45,18 +48,23 @@ async function main() {
         const ALGOLIA_INDEX = 'YCCompany_production';
 
         async function fetchCompaniesFromAPI(page = 0, batchFilter = null, retries = 3) {
-            const apiUrl = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${ALGOLIA_INDEX}`;
-            
-            const body = {
+            const apiUrl = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${ALGOLIA_INDEX}/query`;
+
+            const requestPayload = {
                 query: '',
                 hitsPerPage: 100,
-                page: page,
+                page,
                 tagFilters: [['ycdc_public']],
-                attributesToRetrieve: ['*']
+                attributesToRetrieve: ['*'],
+                analyticsTags: ['ycdc'],
+                restrictIndices: [
+                    'YCCompany_production',
+                    'YCCompany_By_Launch_Date_production',
+                ],
             };
 
             if (batchFilter) {
-                body.filters = `batch:"${batchFilter}"`;
+                requestPayload.filters = `batch:"${batchFilter.replace(/"/g, '\\"')}"`;
             }
 
             for (let attempt = 0; attempt < retries; attempt++) {
@@ -64,13 +72,17 @@ async function main() {
                     // Human-like delay before request
                     await delay(1000 + attempt * 500);
 
+                    const proxyUrl = proxyConf ? await proxyConf.newUrl() : undefined;
+
                     const response = await gotScraping({
                         url: apiUrl,
                         method: 'POST',
-                        body: JSON.stringify(body),
+                        json: requestPayload,
+                        proxyUrl,
                         headers: {
                             'x-algolia-application-id': ALGOLIA_APP_ID,
                             'x-algolia-api-key': ALGOLIA_API_KEY,
+                            'x-algolia-agent': 'Apify/YCCompanyScraper; got-scraping (Node.js)',
                             'content-type': 'application/json; charset=UTF-8',
                             'accept': 'application/json',
                             'accept-language': 'en-US,en;q=0.9',
@@ -84,10 +96,13 @@ async function main() {
                         throwHttpErrors: false,
                     });
 
-                    if (response.statusCode === 200) {
+                    if (response.statusCode === 200 && response.body) {
                         return response.body;
                     } else {
-                        log.warning(`API returned status ${response.statusCode}: ${JSON.stringify(response.body)}`);
+                        const bodyPreview = typeof response.body === 'string'
+                            ? response.body.slice(0, 200)
+                            : JSON.stringify(response.body);
+                        log.warning(`API returned status ${response.statusCode}: ${bodyPreview}`);
                         if (attempt < retries - 1) {
                             const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
                             log.info(`Retrying in ${backoff}ms...`);
@@ -105,7 +120,7 @@ async function main() {
                     }
                 }
             }
-            
+
             throw new Error('All retry attempts failed');
         }
 
@@ -147,9 +162,9 @@ async function main() {
 
         log.info('Starting to fetch companies from Algolia API...');
 
-        while (hasMore && saved < RESULTS_WANTED && currentPage < MAX_PAGES) {
+        while (hasMore && saved < targetResults && currentPage < MAX_PAGES) {
             log.info(`Fetching page ${currentPage}...`);
-            
+
             try {
                 const result = await fetchCompaniesFromAPI(currentPage, batchFilter);
                 
@@ -159,7 +174,7 @@ async function main() {
                 }
 
                 const hits = result.hits || [];
-                
+
                 log.info(`Page ${currentPage}: Found ${hits.length} companies (total: ${result.nbHits || 0})`);
 
                 if (hits.length === 0) {
@@ -168,24 +183,28 @@ async function main() {
                 }
 
                 for (const hit of hits) {
-                    if (saved >= RESULTS_WANTED) break;
+                    if (saved >= targetResults) break;
 
                     const data = mapHitToData(hit);
-                    
+
                     await dataset.pushData(data);
                     saved++;
-                    
+
                     if (saved % 10 === 0) {
-                        log.info(`Progress: ${saved}/${RESULTS_WANTED} companies saved`);
+                        log.info(`Progress: ${saved}/${targetResultsLabel} companies saved`);
                     }
                 }
 
                 // Check if there are more pages
-                hasMore = result.page < result.nbPages - 1 && hits.length > 0;
+                const currentIndex = Number.isFinite(result.page) ? result.page : currentPage;
+                const totalPages = Number.isFinite(result.nbPages) ? result.nbPages : (Number.isFinite(result.nbHits) && Number.isFinite(result.hitsPerPage) && result.hitsPerPage > 0
+                    ? Math.ceil(result.nbHits / result.hitsPerPage)
+                    : Infinity);
+                hasMore = currentIndex < totalPages - 1 && hits.length > 0;
                 currentPage++;
 
                 // Human-like delay between pages
-                if (hasMore && saved < RESULTS_WANTED) {
+                if (hasMore && saved < targetResults) {
                     await delay(2000);
                 }
 
@@ -196,7 +215,7 @@ async function main() {
             }
         }
 
-        log.info(`Finished! Saved ${saved} companies`);
+        log.info(`Finished! Saved ${saved} companies (target: ${targetResultsLabel})`);
     } catch (error) {
         log.error(`Main error: ${error.message}`);
         log.error(`Stack: ${error.stack}`);
