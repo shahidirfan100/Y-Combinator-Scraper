@@ -20,14 +20,14 @@
     "scrape_founders": {
       "title": "Scrape founders",
       "type": "boolean",
-      "description": "If true, scrape founders for each company.",
+      "description": "If true, fetch founder details from each company profile (requires an extra HTTP request per company).",
       "editor": "checkbox",
       "default": true
     },
     "scrape_open_jobs": {
       "title": "Scrape open jobs",
       "type": "boolean",
-      "description": "If true, scrape open jobs for each company.",
+      "description": "If true, attempt to fetch open roles listed on the company profile. Disable to reduce per-company requests.",
       "editor": "checkbox",
       "default": true
     },

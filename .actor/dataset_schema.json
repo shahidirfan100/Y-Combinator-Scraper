@@ -67,7 +67,7 @@
     },
     "founders": {
       "type": "array",
-      "description": "Array of founder objects with id, name, linkedin, x"
+      "description": "Array of founder objects with id, name, title, linkedin, x, bio"
     },
     "open_jobs": {
       "type": "array",

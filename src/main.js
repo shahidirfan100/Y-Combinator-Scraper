@@ -2,6 +2,7 @@
 import { Actor, log } from 'apify';
 import { Dataset } from 'crawlee';
 import { gotScraping } from 'got-scraping';
+import { load as loadHtml } from 'cheerio';
 
 // Single-entrypoint main
 await Actor.init();
@@ -10,9 +11,13 @@ async function main() {
     try {
         const input = (await Actor.getInput()) || {};
         const {
-            url, scrape_all_companies = false, scrape_founders = true, scrape_open_jobs = true,
+            url,
+            scrape_all_companies = false,
+            scrape_founders = true,
+            scrape_open_jobs = true,
             results_wanted: RESULTS_WANTED_RAW = 100,
-            max_pages: MAX_PAGES_RAW = 999, proxyConfiguration,
+            max_pages: MAX_PAGES_RAW = 20,
+            proxyConfiguration,
         } = input;
 
         const RESULTS_WANTED = Number.isFinite(+RESULTS_WANTED_RAW) ? Math.max(1, +RESULTS_WANTED_RAW) : Number.MAX_SAFE_INTEGER;
@@ -24,6 +29,7 @@ async function main() {
         const targetResultsLabel = scrape_all_companies ? 'all available' : targetResults;
 
         log.info(`Results wanted: ${targetResultsLabel}, Max pages: ${MAX_PAGES}`);
+        log.info(`Detail scraping -> founders: ${scrape_founders}, open jobs: ${scrape_open_jobs}`);
 
         const toAbs = (href, base = 'https://www.ycombinator.com') => {
             try { return new URL(href, base).href; } catch { return null; }
@@ -31,10 +37,6 @@ async function main() {
 
         // Human-like delay function with jitter
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 1000));
-
-        const initial = [];
-        if (url) initial.push(url);
-        else initial.push('https://www.ycombinator.com/companies');
 
         const proxyConf = proxyConfiguration ? await Actor.createProxyConfiguration({ ...proxyConfiguration }) : undefined;
 
@@ -124,7 +126,117 @@ async function main() {
             throw new Error('All retry attempts failed');
         }
 
-        function mapHitToData(hit) {
+        const detailCache = new Map();
+
+        const htmlEntities = {
+            '&quot;': '"',
+            '&#x27;': '\'',
+            '&#39;': '\'',
+            '&amp;': '&',
+            '&lt;': '<',
+            '&gt;': '>',
+            '&#x2F;': '/',
+        };
+
+        const decodeEntities = (str = '') => str.replace(/(&quot;|&#x27;|&#39;|&amp;|&lt;|&gt;|&#x2F;)/g, (match) => htmlEntities[match] ?? match);
+
+        async function fetchCompanyDetails(slug, retries = 3) {
+            if (!slug) return null;
+            if (detailCache.has(slug)) return detailCache.get(slug);
+
+            const detailUrl = toAbs(`/companies/${slug}`);
+
+            for (let attempt = 0; attempt < retries; attempt++) {
+                try {
+                    await delay(800 + attempt * 500);
+
+                    const proxyUrl = proxyConf ? await proxyConf.newUrl() : undefined;
+
+                    const response = await gotScraping({
+                        url: detailUrl,
+                        method: 'GET',
+                        proxyUrl,
+                        responseType: 'text',
+                        headers: {
+                            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+                            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                            'accept-language': 'en-US,en;q=0.9',
+                            'cache-control': 'no-cache',
+                            'pragma': 'no-cache',
+                            'referer': 'https://www.ycombinator.com/companies',
+                        },
+                        throwHttpErrors: false,
+                    });
+
+                    if (response.statusCode === 404) {
+                        log.warning(`Company page not found for slug ${slug}`);
+                        detailCache.set(slug, null);
+                        return null;
+                    }
+
+                    if (response.statusCode !== 200 || !response.body) {
+                        throw new Error(`Unexpected status ${response.statusCode}`);
+                    }
+
+                    const $ = loadHtml(response.body);
+                    const dataAttr = $('div[data-page][id*="Companies/ShowPage"]').first().attr('data-page');
+
+                    if (!dataAttr) throw new Error('Detail payload not embedded on page');
+
+                    let parsed;
+                    try {
+                        parsed = JSON.parse(decodeEntities(dataAttr));
+                    } catch (err) {
+                        throw new Error(`Failed to parse detail JSON: ${err.message}`);
+                    }
+
+                    const company = parsed?.props?.company;
+                    if (!company) throw new Error('Missing company payload in detail JSON');
+
+                    const normalized = {
+                        primary_partner: company.primary_group_partner?.name || company.primary_group_partner?.title || null,
+                        founders: Array.isArray(company.founders)
+                            ? company.founders.map((founder) => ({
+                                id: founder.user_id ? String(founder.user_id) : null,
+                                name: founder.full_name || null,
+                                title: founder.title || null,
+                                linkedin: founder.linkedin_url || null,
+                                x: founder.twitter_url || null,
+                                bio: founder.founder_bio || null,
+                            })).filter((founder) => Object.values(founder).some((value) => value))
+                            : [],
+                        open_jobs: Array.isArray(company.job_openings)
+                            ? company.job_openings.map((job) => ({
+                                id: job.id ? String(job.id) : null,
+                                title: job.title || null,
+                                description_url: job.absolute_url || job.url || null,
+                                description: job.description || null,
+                                location: job.location || null,
+                                salary: job.salary || null,
+                                years_experience: job.years_experience || null,
+                            }))
+                            : [],
+                    };
+
+                    detailCache.set(slug, normalized);
+                    return normalized;
+                } catch (error) {
+                    log.warning(`Detail fetch attempt ${attempt + 1} for ${slug} failed: ${error.message}`);
+                    if (attempt < retries - 1) {
+                        const backoff = Math.min(1500 * (attempt + 1), 10000);
+                        log.debug(`Retrying company detail in ${backoff}ms...`);
+                        await delay(backoff);
+                    } else {
+                        detailCache.set(slug, null);
+                        return null;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        function mapHitToData(hit, detail = null) {
             return {
                 company_image: hit.logo_url || hit.small_logo_url || null,
                 company_id: hit.id || hit.objectID || null,
@@ -138,12 +250,12 @@ async function main() {
                 company_location: hit.location || null,
                 year_founded: hit.year_founded ? String(hit.year_founded) : null,
                 team_size: hit.team_size ? String(hit.team_size) : null,
-                primary_partner: null,
+                primary_partner: detail?.primary_partner || null,
                 website: hit.website || null,
-                company_linkedin: hit.linkedin_url || null,
+                company_linkedin: hit.linkedin_url || detail?.founders?.[0]?.linkedin || null,
                 company_x: hit.twitter_url || null,
-                founders: [],
-                open_jobs: []
+                founders: detail?.founders && Array.isArray(detail.founders) ? detail.founders : [],
+                open_jobs: detail?.open_jobs && Array.isArray(detail.open_jobs) ? detail.open_jobs : [],
             };
         }
 
@@ -185,7 +297,19 @@ async function main() {
                 for (const hit of hits) {
                     if (saved >= targetResults) break;
 
-                    const data = mapHitToData(hit);
+                    let detail = null;
+                    if ((scrape_founders || scrape_open_jobs) && hit.slug) {
+                        detail = await fetchCompanyDetails(hit.slug);
+
+                        if (detail && !scrape_founders) {
+                            detail.founders = [];
+                        }
+                        if (detail && !scrape_open_jobs) {
+                            detail.open_jobs = [];
+                        }
+                    }
+
+                    const data = mapHitToData(hit, detail);
 
                     await dataset.pushData(data);
                     saved++;
