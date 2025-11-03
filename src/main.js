@@ -1,6 +1,5 @@
 // Y Combinator companies scraper - Advanced implementation with stealth features
 import { Actor, log } from 'apify';
-import { Dataset } from 'crawlee';
 import { gotScraping } from 'got-scraping';
 import { load as loadHtml } from 'cheerio';
 
@@ -39,8 +38,6 @@ async function main() {
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 1000));
 
         const proxyConf = proxyConfiguration ? await Actor.createProxyConfiguration({ ...proxyConfiguration }) : undefined;
-
-        const dataset = await Dataset.open('ycombinator-companies');
 
         let saved = 0;
 
@@ -311,7 +308,7 @@ async function main() {
 
                     const data = mapHitToData(hit, detail);
 
-                    await dataset.pushData(data);
+                    await Actor.pushData(data);
                     saved++;
 
                     if (saved % 10 === 0) {
