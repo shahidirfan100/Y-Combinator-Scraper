@@ -1,4 +1,4 @@
-// Y Combinator companies scraper - CheerioCrawler implementation
+// Y Combinator companies scraper - Advanced implementation with stealth features
 import { Actor, log } from 'apify';
 import { CheerioCrawler, Dataset } from 'crawlee';
 import { gotScraping } from 'got-scraping';
@@ -26,6 +26,9 @@ async function main() {
             try { return new URL(href, base).href; } catch { return null; }
         };
 
+        // Human-like delay function with jitter
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 1000));
+
         const initial = [];
         if (url) initial.push(url);
         else initial.push('https://www.ycombinator.com/companies');
@@ -41,36 +44,69 @@ async function main() {
         const ALGOLIA_API_KEY = 'MjBjYjRiMzY0NzdhZWY0NjExY2NhZjYxMGIxYjc2MTAwNWFkNTkwNTc4NjgxYjU0YzFhYTY2ZGQ5OGY5NDMxZnJlc3RyaWN0SW5kaWNlcz0lNUIlMjJZQ0NvbXBhbnlfcHJvZHVjdGlvbiUyMiUyQyUyMllDQ29tcGFueV9CeV9MYXVuY2hfRGF0ZV9wcm9kdWN0aW9uJTIyJTVEJnRhZ0ZpbHRlcnM9JTVCJTIyeWNkY19wdWJsaWMlMjIlNUQmYW5hbHl0aWNzVGFncz0lNUIlMjJ5Y2RjJTIyJTVE';
         const ALGOLIA_INDEX = 'YCCompany_production';
 
-        async function fetchCompaniesFromAPI(page = 0, batchFilter = null) {
-            const apiUrl = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${ALGOLIA_INDEX}/query`;
+        async function fetchCompaniesFromAPI(page = 0, batchFilter = null, retries = 3) {
+            const apiUrl = `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${ALGOLIA_INDEX}`;
             
             const body = {
                 query: '',
                 hitsPerPage: 100,
                 page: page,
-                tagFilters: [['ycdc_public']]
+                tagFilters: [['ycdc_public']],
+                attributesToRetrieve: ['*']
             };
 
             if (batchFilter) {
                 body.filters = `batch:"${batchFilter}"`;
             }
 
-            try {
-                const response = await gotScraping.post(apiUrl, {
-                    json: body,
-                    headers: {
-                        'x-algolia-application-id': ALGOLIA_APP_ID,
-                        'x-algolia-api-key': ALGOLIA_API_KEY,
-                        'content-type': 'application/json',
-                    },
-                    responseType: 'json',
-                });
+            for (let attempt = 0; attempt < retries; attempt++) {
+                try {
+                    // Human-like delay before request
+                    await delay(1000 + attempt * 500);
 
-                return response.body;
-            } catch (error) {
-                log.error(`API request failed: ${error.message}`);
-                throw error;
+                    const response = await gotScraping({
+                        url: apiUrl,
+                        method: 'POST',
+                        body: JSON.stringify(body),
+                        headers: {
+                            'x-algolia-application-id': ALGOLIA_APP_ID,
+                            'x-algolia-api-key': ALGOLIA_API_KEY,
+                            'content-type': 'application/json; charset=UTF-8',
+                            'accept': 'application/json',
+                            'accept-language': 'en-US,en;q=0.9',
+                            'origin': 'https://www.ycombinator.com',
+                            'referer': 'https://www.ycombinator.com/companies',
+                            'sec-fetch-dest': 'empty',
+                            'sec-fetch-mode': 'cors',
+                            'sec-fetch-site': 'cross-site',
+                        },
+                        responseType: 'json',
+                        throwHttpErrors: false,
+                    });
+
+                    if (response.statusCode === 200) {
+                        return response.body;
+                    } else {
+                        log.warning(`API returned status ${response.statusCode}: ${JSON.stringify(response.body)}`);
+                        if (attempt < retries - 1) {
+                            const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
+                            log.info(`Retrying in ${backoff}ms...`);
+                            await delay(backoff);
+                        }
+                    }
+                } catch (error) {
+                    log.error(`API request attempt ${attempt + 1} failed: ${error.message}`);
+                    if (attempt < retries - 1) {
+                        const backoff = Math.min(1000 * Math.pow(2, attempt), 10000);
+                        log.info(`Retrying in ${backoff}ms...`);
+                        await delay(backoff);
+                    } else {
+                        throw error;
+                    }
+                }
             }
+            
+            throw new Error('All retry attempts failed');
         }
 
         function mapHitToData(hit) {
@@ -78,7 +114,7 @@ async function main() {
                 company_image: hit.logo_url || hit.small_logo_url || null,
                 company_id: hit.id || hit.objectID || null,
                 company_name: hit.name || null,
-                url: hit.url ? toAbs(`/companies/${hit.slug}`) : null,
+                url: hit.slug ? toAbs(`/companies/${hit.slug}`) : null,
                 short_description: hit.one_liner || null,
                 long_description: hit.long_description || null,
                 batch: hit.batch || null,
@@ -109,22 +145,33 @@ async function main() {
         let currentPage = 0;
         let hasMore = true;
 
+        log.info('Starting to fetch companies from Algolia API...');
+
         while (hasMore && saved < RESULTS_WANTED && currentPage < MAX_PAGES) {
             log.info(`Fetching page ${currentPage}...`);
             
             try {
                 const result = await fetchCompaniesFromAPI(currentPage, batchFilter);
+                
+                if (!result || !result.hits) {
+                    log.error(`Invalid API response: ${JSON.stringify(result)}`);
+                    break;
+                }
+
                 const hits = result.hits || [];
                 
-                log.info(`Page ${currentPage}: Found ${hits.length} companies`);
+                log.info(`Page ${currentPage}: Found ${hits.length} companies (total: ${result.nbHits || 0})`);
+
+                if (hits.length === 0) {
+                    log.info('No more companies found');
+                    break;
+                }
 
                 for (const hit of hits) {
                     if (saved >= RESULTS_WANTED) break;
 
                     const data = mapHitToData(hit);
                     
-                    // For now, just save basic data without detail scraping
-                    // Detail scraping can be added later if needed
                     await dataset.pushData(data);
                     saved++;
                     
@@ -137,16 +184,29 @@ async function main() {
                 hasMore = result.page < result.nbPages - 1 && hits.length > 0;
                 currentPage++;
 
+                // Human-like delay between pages
+                if (hasMore && saved < RESULTS_WANTED) {
+                    await delay(2000);
+                }
+
             } catch (error) {
                 log.error(`Failed to fetch page ${currentPage}: ${error.message}`);
+                log.error(`Error stack: ${error.stack}`);
                 break;
             }
         }
 
         log.info(`Finished! Saved ${saved} companies`);
+    } catch (error) {
+        log.error(`Main error: ${error.message}`);
+        log.error(`Stack: ${error.stack}`);
+        throw error;
     } finally {
         await Actor.exit();
     }
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+main().catch(err => { 
+    console.error('Fatal error:', err); 
+    process.exit(1); 
+});
