@@ -35,7 +35,38 @@ async function main() {
         };
 
         // Human-like delay function with jitter
-        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * 1000));
+        const delay = (ms, jitter = 1000) => new Promise(resolve => setTimeout(resolve, ms + Math.random() * jitter));
+
+        const createLimiter = (limit) => {
+            if (!limit || limit <= 1) {
+                return async (task) => {
+                    await delay(120, 200);
+                    return task();
+                };
+            }
+            let running = 0;
+            const queue = [];
+            const runNext = () => {
+                if (running >= limit || queue.length === 0) return;
+                const { task, resolve, reject } = queue.shift();
+                running++;
+                Promise.resolve()
+                    .then(async () => {
+                        await delay(120, 200);
+                        return task();
+                    })
+                    .then(resolve)
+                    .catch(reject)
+                    .finally(() => {
+                        running--;
+                        runNext();
+                    });
+            };
+            return (task) => new Promise((resolve, reject) => {
+                queue.push({ task, resolve, reject });
+                runNext();
+            });
+        };
 
         const proxyConf = proxyConfiguration ? await Actor.createProxyConfiguration({ ...proxyConfiguration }) : undefined;
 
@@ -69,7 +100,7 @@ async function main() {
             for (let attempt = 0; attempt < retries; attempt++) {
                 try {
                     // Human-like delay before request
-                    await delay(1000 + attempt * 500);
+                    await delay(400 + attempt * 250, 350);
 
                     const proxyUrl = proxyConf ? await proxyConf.newUrl() : undefined;
 
@@ -133,6 +164,9 @@ async function main() {
         }
 
         const detailCache = new Map();
+        const detailLimiter = (!scrape_founders && !scrape_open_jobs)
+            ? async (task) => task()
+            : createLimiter(proxyConf ? 2 : 4);
 
         const htmlEntities = {
             '&quot;': '"',
@@ -154,7 +188,7 @@ async function main() {
 
             for (let attempt = 0; attempt < retries; attempt++) {
                 try {
-                    await delay(800 + attempt * 500);
+                    await delay(300 + attempt * 200, 250);
 
                     const proxyUrl = proxyConf ? await proxyConf.newUrl() : undefined;
 
@@ -309,30 +343,45 @@ async function main() {
                     break;
                 }
 
-                for (const hit of hits) {
-                    if (saved >= targetResults) break;
-
-                    let detail = null;
-                    if ((scrape_founders || scrape_open_jobs) && hit.slug) {
-                        detail = await fetchCompanyDetails(hit.slug);
-
-                        if (detail && !scrape_founders) {
-                            detail.founders = [];
-                        }
-                        if (detail && !scrape_open_jobs) {
-                            detail.open_jobs = [];
-                        }
-                    }
-
-                    const data = mapHitToData(hit, detail);
-
-                    await Actor.pushData(data);
-                    saved++;
-
-                    if (saved % 10 === 0) {
-                        log.info(`Progress: ${saved}/${targetResultsLabel} companies saved`);
-                    }
+                const remaining = targetResults - saved;
+                if (remaining <= 0) {
+                    log.info('Reached target number of companies');
+                    break;
                 }
+
+                const hitsToProcess = remaining < hits.length ? hits.slice(0, remaining) : hits;
+
+                if (hitsToProcess.length === 0) {
+                    log.info('Reached target number of companies');
+                    break;
+                }
+
+                const pageTasks = hitsToProcess.map(async (hit) => {
+                    try {
+                        let detail = null;
+                        if ((scrape_founders || scrape_open_jobs) && hit.slug) {
+                            detail = await detailLimiter(() => fetchCompanyDetails(hit.slug));
+
+                            if (detail) {
+                                if (!scrape_founders) detail.founders = [];
+                                if (!scrape_open_jobs) detail.open_jobs = [];
+                            }
+                        }
+
+                        const data = mapHitToData(hit, detail);
+
+                        await Actor.pushData(data);
+                        saved++;
+
+                        if (saved % 10 === 0) {
+                            log.info(`Progress: ${saved}/${targetResultsLabel} companies saved`);
+                        }
+                    } catch (err) {
+                        log.error(`Failed to process company ${hit.slug || hit.id || 'unknown'}: ${err.message}`);
+                    }
+                });
+
+                await Promise.all(pageTasks);
 
                 // Check if there are more pages
                 const currentIndex = Number.isFinite(result.page) ? result.page : currentPage;
@@ -344,7 +393,7 @@ async function main() {
 
                 // Human-like delay between pages
                 if (hasMore && saved < targetResults) {
-                    await delay(2000);
+                    await delay(700, 500);
                 }
 
             } catch (error) {
