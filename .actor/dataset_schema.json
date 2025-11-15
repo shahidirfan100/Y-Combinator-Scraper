@@ -9,6 +9,10 @@
       "type": "string",
       "description": "Unique identifier for the company"
     },
+    "slug": {
+      "type": "string",
+      "description": "Y Combinator company slug (used in the YC profile URL)"
+    },
     "company_name": {
       "type": "string",
       "description": "Name of the company"
@@ -20,6 +24,10 @@
     "short_description": {
       "type": "string",
       "description": "Short description of the company"
+    },
+    "one_liner": {
+      "type": "string",
+      "description": "One-line summary or tagline from YC listing"
     },
     "long_description": {
       "type": "string",
@@ -53,9 +61,25 @@
       "type": "string",
       "description": "Primary Y Combinator partner"
     },
+    "primary_group_partner": {
+      "type": "object",
+      "description": "Detailed partner object as provided in the YC detail payload (if available)",
+      "properties": {
+        "name": {"type": "string"},
+        "title": {"type": "string"}
+      }
+    },
+    "market": {
+      "type": "string",
+      "description": "Market or category tag for the company (if available from YC)"
+    },
     "website": {
       "type": "string",
       "description": "Company website URL"
+    },
+    "algolia_raw": {
+      "type": "object",
+      "description": "Raw Algolia 'hit' record returned by the API. Stored for debugging and inspection."
     },
     "company_linkedin": {
       "type": "string",
@@ -118,6 +142,10 @@
           },
           "team_size": {
             "label": "Team Size",
+            "format": "text"
+          },
+          "slug": {
+            "label": "Slug",
             "format": "text"
           },
           "website": {

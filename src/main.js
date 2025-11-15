@@ -237,6 +237,9 @@ try {
 
                 const normalized = {
                     primary_partner: company.primary_group_partner?.name || company.primary_group_partner?.title || null,
+                    // Company image and location extracted from detail payload if available
+                    company_image: company.logo_url || company.logo || company.small_logo_url || company.logoUrl || company.image || null,
+                    company_location: company.location || company.headquarters || company.hq || company.city || company.city_state || null,
                     founders: Array.isArray(company.founders)
                         ? company.founders.map((founder) => ({
                             id: founder.user_id ? String(founder.user_id) : null,
@@ -284,9 +287,14 @@ try {
         return null;
     }
 
+    // Counters to avoid log spam
+    let _missingImageCount = 0;
+    let _missingLocationCount = 0;
+
     function mapHitToData(hit, detail = null) {
-        return {
-            company_image: hit.logo_url || hit.small_logo_url || null,
+        const data = {
+            // Prefer detail page image, then multiple common Algolia fields
+            company_image: detail?.company_image || hit.logo_url || hit.small_logo_url || hit.logo || hit.logoURL || hit.image || hit.image_url || null,
             company_id: hit.id || hit.objectID || null,
             company_name: hit.name || null,
             url: hit.slug ? toAbs(`/companies/${hit.slug}`) : null,
@@ -295,7 +303,8 @@ try {
             batch: hit.batch || null,
             status: hit.ycdc_status || hit.status || null,
             tags: hit.tags || [],
-            company_location: hit.location || null,
+            // Try several common location fields; prefer detail page when present
+            company_location: detail?.company_location || hit.location || hit.hq || hit.headquarters || hit.city || hit.city_state || null,
             year_founded: hit.year_founded ? String(hit.year_founded) : null,
             team_size: hit.team_size ? String(hit.team_size) : null,
             primary_partner: detail?.primary_partner || null,
@@ -305,6 +314,19 @@ try {
             founders: detail?.founders && Array.isArray(detail.founders) ? detail.founders : [],
             open_jobs: detail?.open_jobs && Array.isArray(detail.open_jobs) ? detail.open_jobs : [],
         };
+
+        // Debug logs: only for first few missing results to avoid spamming
+        if (!data.company_image && (!hit.logo_url && !hit.small_logo_url && !hit.logo && !hit.logoURL && !hit.image && !detail?.company_image)) {
+            _missingImageCount++;
+            if (_missingImageCount <= 5) log.debug(`Missing image for hit ${hit.slug || hit.objectID || hit.id || 'unknown'}. Keys: ${Object.keys(hit).slice(0,10).join(', ')}`);
+        }
+
+        if (!data.company_location && (!hit.location && !hit.hq && !hit.headquarters && !detail?.company_location)) {
+            _missingLocationCount++;
+            if (_missingLocationCount <= 5) log.debug(`Missing location for hit ${hit.slug || hit.objectID || hit.id || 'unknown'}. Keys: ${Object.keys(hit).slice(0,10).join(', ')}`);
+        }
+
+        return data;
     }
 
     // Parse batch filter from URL if present
