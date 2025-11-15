@@ -1,58 +1,67 @@
 {
-  "title": "Y Combinator Companies Scraper",
-  "description": "Scrape companies from Y Combinator directory. Provide url or scrape_all_companies.",
+  "title": "Y Combinator Companies Scraper Input",
+  "description": "Configure the scraper to extract company data from Y Combinator directory",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
     "url": {
       "title": "Start URL",
       "type": "string",
-      "description": "URL to scrape companies from, e.g., https://www.ycombinator.com/companies?batch=Summer%202025",
-      "editor": "textfield"
+      "description": "URL to scrape companies from (e.g., https://www.ycombinator.com/companies?batch=W25)",
+      "editor": "textfield",
+      "example": "https://www.ycombinator.com/companies"
     },
     "scrape_all_companies": {
       "title": "Scrape all companies",
       "type": "boolean",
-      "description": "If true, scrape all companies from the directory. If false, use the provided URL.",
+      "description": "Scrape all companies from the directory. If false, use the provided URL or default page.",
       "editor": "checkbox",
       "default": false
     },
     "scrape_founders": {
-      "title": "Scrape founders",
+      "title": "Scrape founders data",
       "type": "boolean",
-      "description": "If true, fetch founder details from each company profile (requires an extra HTTP request per company).",
+      "description": "Extract founder details from company profiles (increases runtime)",
       "editor": "checkbox",
-      "default": true
+      "default": false
     },
     "scrape_open_jobs": {
-      "title": "Scrape open jobs",
+      "title": "Scrape job openings",
       "type": "boolean",
-      "description": "If true, attempt to fetch open roles listed on the company profile. Disable to reduce per-company requests.",
+      "description": "Extract open job positions from company profiles (increases runtime)",
       "editor": "checkbox",
-      "default": true
+      "default": false
     },
     "results_wanted": {
-      "title": "Maximum number of companies",
+      "title": "Results limit",
       "type": "integer",
-      "description": "The maximum number of companies to collect. Leave empty to collect all available companies.",
+      "description": "Maximum number of companies to scrape",
       "minimum": 1,
-      "default": 100,
-      "editor": "number"
+      "maximum": 10000,
+      "default": 20,
+      "editor": "number",
+      "prefill": 20
     },
     "max_pages": {
-      "title": "Maximum number of pages",
+      "title": "Maximum pages",
       "type": "integer",
-      "description": "A safety cap on the number of search result pages to visit.",
+      "description": "Safety limit on number of pages to scrape",
       "minimum": 1,
+      "maximum": 100,
       "editor": "number",
-      "default": 20
+      "default": 5,
+      "prefill": 5
     },
     "proxyConfiguration": {
       "title": "Proxy configuration",
       "type": "object",
-      "description": "Use Apify Proxy (datacenter recommended for Y Combinator).",
+      "description": "Proxy settings for reliable data extraction",
       "editor": "proxy",
       "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": ["RESIDENTIAL"]
+      },
+      "prefill": {
         "useApifyProxy": true,
         "apifyProxyGroups": ["RESIDENTIAL"]
       }

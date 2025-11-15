@@ -1,73 +1,116 @@
 # Y Combinator Companies Scraper
 
+[![Apify Actor](https://img.shields.io/badge/Apify-Actor-blue)](https://apify.com/shahidirfan100/ycombinator-companies-scraper)
+[![Scrape YC Companies](https://img.shields.io/badge/Scrape-YC%20Companies-green)](https://apify.com/shahidirfan100/ycombinator-companies-scraper)
+
 ## Overview
 
-This Apify actor efficiently scrapes company listings from the Y Combinator directory. It provides comprehensive data on YC-funded startups, including basic company information, founders, and open job opportunities. Perfect for market research, investment analysis, and talent scouting.
+Discover and extract comprehensive data from the Y Combinator companies directory with this powerful scraper. Whether you're conducting market research, analyzing startup trends, or scouting talent, this tool provides structured access to YC-funded companies, their founders, and open job opportunities. Perfect for investors, recruiters, and analysts seeking insights into the startup ecosystem.
+
+**Keywords:** Y Combinator scraper, YC companies scraper, startup directory scraper, scrape Y Combinator companies, YC batch scraper, founder data extraction, job listings scraper.
 
 ## Features
 
-- **Comprehensive Company Data**: Extracts detailed information about Y Combinator companies, including names, descriptions, locations, and funding details.
-- **Flexible Scraping Options**: Choose to scrape all companies or focus on specific batches via custom URLs.
-- **Founder Information**: Optionally retrieve founder details including names and social media profiles.
-- **Job Opportunities**: Discover open positions at YC companies with full job descriptions.
-- **Pagination Handling**: Automatically navigates through directory pages to collect the desired number of results.
-- **Proxy Support**: Built-in proxy configuration for reliable data extraction.
-- **Structured Output**: Saves all data in a clean, consistent JSON format to an Apify dataset.
+- **Complete Company Profiles**: Extract detailed information about Y Combinator-backed startups, including company names, descriptions, locations, funding batches, and status.
+- **Founder Insights**: Optionally scrape founder details with names and social media links for deeper analysis.
+- **Job Market Intelligence**: Access open positions at YC companies, including job titles, descriptions, locations, and salary ranges.
+- **Batch-Specific Scraping**: Target specific Y Combinator batches (e.g., Summer 2025, Winter 2024) or scrape the entire directory.
+- **Flexible Data Collection**: Customize what data to collect based on your research needs.
+- **Reliable Extraction**: Built-in mechanisms to handle dynamic content and ensure comprehensive data retrieval.
+- **Structured JSON Output**: Clean, consistent data format ready for analysis or integration.
+
+## How It Works
+
+This scraper navigates the Y Combinator companies directory, systematically collecting data from company profiles. It handles pagination automatically and can visit individual company pages for additional details like founders and jobs. The process is optimized for efficiency while respecting website guidelines.
 
 ## Input Parameters
 
-The actor accepts the following input parameters:
+Configure the scraper using the following parameters:
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `url` | string | Specific Y Combinator directory URL to start scraping from (e.g., `https://www.ycombinator.com/companies?batch=Summer%202025`). If provided, overrides the default directory URL. | - |
-| `scrape_all_companies` | boolean | If `true`, scrape companies from the entire directory. If `false`, use the provided `url` or default to the main directory page. | `false` |
-| `scrape_founders` | boolean | If `true`, visit individual company pages to extract founder information. | `true` |
-| `scrape_open_jobs` | boolean | If `true`, visit individual company pages to extract open job listings. | `true` |
-| `results_wanted` | integer | Maximum number of companies to collect. Set to a high number or leave empty to collect all available. | `100` |
-| `max_pages` | integer | Maximum number of directory pages to visit as a safety limit. | `20` |
-| `proxyConfiguration` | object | Proxy settings for the scraper. Recommended to use Apify Proxy for best results. | `{"useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"]}` |
+<table>
+  <thead>
+    <tr>
+      <th>Parameter</th>
+      <th>Type</th>
+      <th>Description</th>
+      <th>Default</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>url</code></td>
+      <td>string</td>
+      <td>Specific Y Combinator directory URL to start scraping (e.g., <code>https://www.ycombinator.com/companies?batch=Summer%202025</code>). Overrides default if provided.</td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td><code>scrape_all_companies</code></td>
+      <td>boolean</td>
+      <td>Scrape companies from the entire directory if <code>true</code>, or use provided URL/default page if <code>false</code>.</td>
+      <td><code>false</code></td>
+    </tr>
+    <tr>
+      <td><code>scrape_founders</code></td>
+      <td>boolean</td>
+      <td>Extract founder information from individual company pages.</td>
+      <td><code>true</code></td>
+    </tr>
+    <tr>
+      <td><code>scrape_open_jobs</code></td>
+      <td>boolean</td>
+      <td>Extract open job listings from company pages.</td>
+      <td><code>true</code></td>
+    </tr>
+    <tr>
+      <td><code>results_wanted</code></td>
+      <td>integer</td>
+      <td>Maximum number of companies to collect. Use high number for all available.</td>
+      <td><code>100</code></td>
+    </tr>
+    <tr>
+      <td><code>max_pages</code></td>
+      <td>integer</td>
+      <td>Maximum directory pages to visit as a safety limit.</td>
+      <td><code>20</code></td>
+    </tr>
+    <tr>
+      <td><code>proxyConfiguration</code></td>
+      <td>object</td>
+      <td>Proxy settings for reliable scraping. Use Apify Proxy for best results.</td>
+      <td><code>{"useApifyProxy": true, "apifyProxyGroups": ["RESIDENTIAL"]}</code></td>
+    </tr>
+  </tbody>
+</table>
 
 ## Output Data
 
-The actor outputs structured data for each company to an Apify dataset. Each record contains:
+The scraper outputs structured JSON records to an Apify dataset. Each record represents a company with the following fields:
 
-### Basic Company Information
-- `company_image`: URL of the company's logo
-- `company_id`: Unique identifier for the company
-- `company_name`: Official company name
-- `url`: Link to the company's Y Combinator profile page
-- `short_description`: Brief company description
-- `long_description`: Detailed company description
-- `batch`: Y Combinator batch (e.g., "S25", "W24")
-- `status`: Current company status (e.g., "Active", "Acquired")
-- `tags`: Array of industry or technology tags
-- `company_location`: Geographic location of the company
-- `year_founded`: Year the company was founded
-- `team_size`: Number of team members
-- `primary_partner`: Main Y Combinator partner associated with the company
-- `website`: Company's official website URL
-- `company_linkedin`: LinkedIn profile URL
-- `company_x`: X (formerly Twitter) profile URL
+### Core Company Fields
+- <code>company_image</code>: Company logo URL
+- <code>company_id</code>: Unique company identifier
+- <code>company_name</code>: Official company name
+- <code>url</code>: Y Combinator profile URL
+- <code>short_description</code>: Brief company overview
+- <code>long_description</code>: Detailed company description
+- <code>batch</code>: YC batch (e.g., "S25", "W24")
+- <code>status</code>: Company status (Active, Acquired, etc.)
+- <code>tags</code>: Industry/technology tags array
+- <code>company_location</code>: Geographic location
+- <code>year_founded</code>: Founding year
+- <code>team_size</code>: Number of team members
+- <code>primary_partner</code>: Associated YC partner
+- <code>website</code>: Official website URL
+- <code>company_linkedin</code>: LinkedIn profile
+- <code>company_x</code>: X (Twitter) profile
 
-### Founders (when `scrape_founders` is enabled)
-- `founders`: Array of founder objects, each containing:
-  - `id`: Founder identifier
-  - `name`: Founder's full name
-  - `linkedin`: LinkedIn profile URL
-  - `x`: X profile URL
+### Founders Data (when enabled)
+- <code>founders</code>: Array of founder objects with <code>id</code>, <code>name</code>, <code>linkedin</code>, <code>x</code>
 
-### Open Jobs (when `scrape_open_jobs` is enabled)
-- `open_jobs`: Array of job objects, each containing:
-  - `id`: Job posting identifier
-  - `title`: Job title
-  - `description_url`: URL to the full job description
-  - `description`: Job description text
-  - `location`: Job location
-  - `salary`: Salary information
-  - `years_experience`: Required years of experience
+### Jobs Data (when enabled)
+- <code>open_jobs</code>: Array of job objects with <code>id</code>, <code>title</code>, <code>description_url</code>, <code>description</code>, <code>location</code>, <code>salary</code>, <code>years_experience</code>
 
-### Example Output Record
+### Sample Output Record
 
 ```json
 {
@@ -111,22 +154,31 @@ The actor outputs structured data for each company to an Apify dataset. Each rec
 
 ## Usage
 
-### Basic Usage
+### Running on Apify Platform
 
-1. **Run the Actor**: Start the actor from the Apify platform or via API.
-2. **Configure Inputs**: Set your desired parameters in the input form.
-3. **Monitor Progress**: Track scraping progress in real-time.
-4. **Access Results**: Download the dataset in JSON, CSV, or other formats.
+1. Navigate to the [Y Combinator Companies Scraper](https://apify.com/shahidirfan100/ycombinator-companies-scraper) on Apify.
+2. Click "Run" to start the actor.
+3. Configure input parameters in the form.
+4. Monitor progress and view results in the dataset.
 
-### Advanced Configuration
+### API Usage
 
-- **Target Specific Batches**: Use the `url` parameter to focus on particular Y Combinator batches (e.g., Summer 2025, Winter 2024).
-- **Large-Scale Scraping**: Increase `results_wanted` and `max_pages` for comprehensive data collection.
-- **Performance Optimization**: Adjust proxy settings based on your Apify plan for faster, more reliable scraping.
+Use the Apify API to run the scraper programmatically:
 
-## Configuration Examples
+```bash
+curl -X POST "https://api.apify.com/v2/acts/shahidirfan100~ycombinator-companies-scraper/runs?token=YOUR_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scrape_all_companies": true,
+    "scrape_founders": true,
+    "results_wanted": 500
+  }'
+```
 
-### Scrape Summer 2025 Batch Companies with Founders
+### Configuration Examples
+
+<details>
+<summary><strong>Scrape Specific Batch with Founders</strong></summary>
 
 ```json
 {
@@ -136,8 +188,10 @@ The actor outputs structured data for each company to an Apify dataset. Each rec
   "results_wanted": 50
 }
 ```
+</details>
 
-### Scrape All Companies with Full Details
+<details>
+<summary><strong>Comprehensive Directory Scan</strong></summary>
 
 ```json
 {
@@ -148,8 +202,10 @@ The actor outputs structured data for each company to an Apify dataset. Each rec
   "max_pages": 50
 }
 ```
+</details>
 
-### Quick Company Overview
+<details>
+<summary><strong>Quick Company Overview</strong></summary>
 
 ```json
 {
@@ -158,22 +214,32 @@ The actor outputs structured data for each company to an Apify dataset. Each rec
   "results_wanted": 100
 }
 ```
+</details>
 
-## Limitations
+## Cost and Performance
 
-- The actor respects Y Combinator's website terms of service and implements appropriate delays between requests.
-- Some company data may be incomplete if not publicly available on the directory.
-- Job and founder information requires additional page visits, which may increase scraping time.
-- Results are limited by the current state of the Y Combinator directory and may not include the most recently added companies.
+- **Compute Units**: Approximately 0.01-0.05 CU per company depending on data depth.
+- **Estimated Cost**: $0.001-$0.005 per company (based on Apify pricing).
+- **Performance**: Processes 10-50 companies per minute, depending on configuration and proxy settings.
 
-## Support
+## Limitations and Best Practices
 
-For issues, feature requests, or questions about this actor:
+- Respects Y Combinator's terms of service with appropriate request delays.
+- Some data may be incomplete if not publicly available.
+- Founder and job data requires additional page visits, increasing processing time.
+- Results reflect the current state of the directory and may not include the most recent additions.
+- For large-scale scraping, use residential proxies and monitor rate limits.
 
-- Check the [Apify documentation](https://docs.apify.com/) for general guidance.
-- Review the actor's source code for implementation details.
-- Contact the actor maintainer through the Apify platform.
+## Support and Resources
+
+- **Documentation**: Refer to [Apify Docs](https://docs.apify.com/) for platform guidance.
+- **Issues**: Report bugs or request features via the actor page.
+- **Updates**: Check changelog for new features and improvements.
 
 ## Changelog
 
-- **v1.0.0**: Initial release with full Y Combinator directory scraping capabilities.
+- **v1.0.0**: Initial release with comprehensive Y Combinator directory scraping capabilities, including company profiles, founders, and job listings.
+
+---
+
+**Discover more YC insights with this scraper. Start extracting valuable startup data today!**

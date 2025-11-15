@@ -1,7 +1,11 @@
 {
-  "url": "https://www.ycombinator.com/companies?batch=Summer%202025",
-  "scrape_founders": true,
-  "scrape_open_jobs": true,
-  "results_wanted": 10,
-  "max_pages": 3
+  "url": "https://www.ycombinator.com/companies",
+  "scrape_founders": false,
+  "scrape_open_jobs": false,
+  "results_wanted": 20,
+  "max_pages": 1,
+  "proxyConfiguration": {
+    "useApifyProxy": true,
+    "apifyProxyGroups": ["RESIDENTIAL"]
+  }
 }
