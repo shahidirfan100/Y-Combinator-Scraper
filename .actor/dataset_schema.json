@@ -53,6 +53,10 @@
       "type": "string",
       "description": "Year the company was founded"
     },
+    "founded_raw": {
+      "type": "string",
+      "description": "Raw founding date or text as seen on YC profile (unparsed)"
+    },
     "team_size": {
       "type": "string",
       "description": "Team size"

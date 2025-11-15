@@ -261,6 +261,9 @@ try {
                             years_experience: job.years_experience || null,
                         }))
                         : [],
+                    // Try to extract a founding year from multiple possible payload keys
+                    year_founded: company.year_founded || company.founded_year || company.founded || company.founded_at || company.founding_year || company.established || null,
+                    founded_raw: company.founded || company.founded_at || null
                 };
 
                 detailCache.set(slug, normalized);
@@ -290,6 +293,8 @@ try {
     // Counters to avoid log spam
     let _missingImageCount = 0;
     let _missingLocationCount = 0;
+    let _missingYearCount = 0;
+    let _foundYearCount = 0;
 
     function mapHitToData(hit, detail = null) {
         const data = {
@@ -305,7 +310,11 @@ try {
             tags: hit.tags || [],
             // Try several common location fields; prefer detail page when present
             company_location: detail?.company_location || hit.location || hit.hq || hit.headquarters || hit.city || hit.city_state || null,
-            year_founded: hit.year_founded ? String(hit.year_founded) : null,
+            // Prefer detail payload year then common Algolia hit fields
+            year_founded: detail?.year_founded ? String(detail.year_founded) : (hit.year_founded ? String(hit.year_founded) : (hit.founded || hit.founded_year || hit.established ? String(hit.founded || hit.founded_year || hit.established) : null)),
+            founded_raw: detail?.founded_raw || hit.founded || hit.founded_at || hit.founded_date || hit.founded_on || null,
+            // Store raw Algolia hit for debugging (trimmed by Apify UI but useful for QA). Remove if sensitive.
+            algolia_raw: hit || null,
             team_size: hit.team_size ? String(hit.team_size) : null,
             primary_partner: detail?.primary_partner || null,
             website: hit.website || null,
@@ -324,6 +333,19 @@ try {
         if (!data.company_location && (!hit.location && !hit.hq && !hit.headquarters && !detail?.company_location)) {
             _missingLocationCount++;
             if (_missingLocationCount <= 5) log.debug(`Missing location for hit ${hit.slug || hit.objectID || hit.id || 'unknown'}. Keys: ${Object.keys(hit).slice(0,10).join(', ')}`);
+        }
+
+        // Year founded fallback: detail -> common hit fields
+        if (!data.year_founded && !(detail?.year_founded || hit.year_founded || hit.founded || hit.founded_year || hit.established)) {
+            _missingYearCount++;
+            if (_missingYearCount <= 5) log.debug(`Missing year_founded for hit ${hit.slug || hit.objectID || hit.id || 'unknown'}. Keys: ${Object.keys(hit).slice(0,10).join(', ')}`);
+        }
+
+        // Log where year was found when it is found for the first few cases
+        if (data.year_founded && _foundYearCount < 3) {
+            _foundYearCount++;
+            const source = detail?.year_founded ? 'detail' : (hit.year_founded ? 'hit.year_founded' : 'hit.other');
+            log.debug(`Found year_founded (${data.year_founded}) for hit ${hit.slug || hit.objectID || hit.id || 'unknown'} from ${source}`);
         }
 
         return data;
